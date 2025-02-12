@@ -1,0 +1,106 @@
+### РАБОТА С БД
+
+database:
+ python .\manage.py makemigrations company --dry-run (preview)
+ python .\manage.py makemigrations company
+ python manage.py sqlmigrate company 0001
+ python manage.py migrate company 
+
+seeders:
+ python manage.py seed company --number=50
+
+```
+    python manage.py shell
+
+    from company.models import *
+
+    v = Employee()
+    v.fio = "Петров Семен Семенович"
+    v.job = "Архитектор"
+    v.save()
+    v.pk
+
+    v = Employee.objects.get(pk=1)
+    v.fio = "Новое Имя"
+    v.department
+    v.save()
+    v.delete()
+   
+    try: 
+        v = Employee.objects.get(job='Сантехник2')
+    except Employee.DoesNotExist as e:
+        print(e)
+
+    v = Employee(fio="Иванов Иван Петрович",job="Сантехник")
+    v.save()    
+
+    v = Employee.objects.create(fio="Иванов Иван Петрович",job="Сантехник")
+
+    for e in Employee.objects.filter(department__gte=2).all():
+        print(e.pk, e.fio)
+
+    v = Employee.objects.get(pk=2)
+    v.department.name
+```
+
+### С помощью django_seed
+```
+    from django.db import connection
+    from django_seed import Seed
+
+    office_count = 3
+    departmens_per_office = 4
+    employees_per_department = 7
+
+    seeder = Seed.seeder()
+    seeder.add_entity(Office, office_count)
+
+    for i in range(office_count):    
+        seeder.add_entity(Department, departmens_per_office, {
+            'office_id': i+1
+        })
+
+    for i in range(office_count*departmens_per_office):
+        seeder.add_entity(Employee, employees_per_department, {
+            'department_id': i+1
+        })
+
+    seeder.execute()
+
+    Offices.objects.filter(id__gt=3).delete()       оставляем три филиала
+    Department.objects.filter(age__isnull=True).delete()   убираем отделы без филиалов
+    Employee.objects.update(job='Менеджер')
+```    
+
+
+from django.db import reset_queries, connection
+from django.db.models import Q
+len(connection.queries)
+reset_queries()
+
+
+* количество сотрудников с должностью “Менеджер”
+    Employee.objects.filter(job="Менеджер").count()
+    запрос не выдан т.к. результат int
+
+* список сотрудников, работающих на четвертых этажах
+    Employee.objects.filter(department__stage=4).all()
+    SELECT "company_employee"."id", "company_employee"."fio", "company_employee"."job", "company_employee"."phone", "company_employee"."burn", "company_employee"."email", "company_employee"."department_id" FROM "company_employee" INNER JOIN "company_department" ON ("company_employee"."department_id" = "company_department"."id") WHERE "company_department"."stage" = 4
+
+* по известным двум ID филиала получить их сотрудников (с помощью Q и с лукапом проверки вхождения ID в список)
+    v = Office.objects.all()[:2]
+
+    Office.objects.filter(Q(id=v[0].id) | Q(id=v[1].id))
+    SELECT "company_office"."id", "company_office"."short_name", "company_office"."address" FROM "company_office" WHERE "company_office"."id" IN (1, 2)
+
+    Office.objects.filter(id__in=[v[0].id, v[1].id])
+    SELECT "company_office"."id", "company_office"."short_name", "company_office"."address" FROM "company_office" WHERE ("company_office"."id" = 1 OR "company_office"."id" = 500)
+
+    
+* список ФИО сотрудников, у которых не указан email
+    Employee.objects.filter(email__isnull=True).all()
+    SELECT "company_employee"."id", "company_employee"."fio", "company_employee"."job", "company_employee"."phone", "company_employee"."burn", "company_employee"."email", "company_employee"."department_id" FROM "company_employee" WHERE "company_employee"."email" IS NULL
+    
+* список сотрудников, чей год рождения 1990
+    Employee.objects.filter(burn__year=1990).all()
+    SELECT "company_employee"."id", "company_employee"."fio", "company_employee"."job", "company_employee"."phone", "company_employee"."burn", "company_employee"."email", "company_employee"."department_id" FROM "company_employee" WHERE "company_employee"."burn" BETWEEN 1990-01-01 AND 1990-12-31    
